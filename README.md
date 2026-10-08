@@ -1,10 +1,16 @@
 <div align="center">
 
-# SHL Grammar Scoring Engine
+<img src="assets/banner.svg" alt="SHL Grammar Scoring Engine" width="100%"/>
 
-### From spoken responses to grammar scores — with transcript structure, transformer representations, and OOF ensembling.
+<br/>
 
-**769 labeled training clips · 216 test clips · 0–5 grammar score · RMSE + Pearson**
+![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Whisper](https://img.shields.io/badge/ASR-Whisper-10a37f?style=for-the-badge)
+![DeBERTa](https://img.shields.io/badge/Transformer-DeBERTa--v3--base-7c3aed?style=for-the-badge)
+![Kaggle](https://img.shields.io/badge/Kaggle-SHL%202026-20BEFF?style=for-the-badge&logo=kaggle&logoColor=white)
+![Validation](https://img.shields.io/badge/Validation-5--fold%20OOF-0ea5e9?style=for-the-badge)
+
+**769 labeled clips &nbsp;|&nbsp; 216 test clips &nbsp;|&nbsp; 0 to 5 grammar score &nbsp;|&nbsp; metrics: RMSE + Pearson**
 
 </div>
 
@@ -12,104 +18,114 @@
 
 ## The idea
 
-A 45–60 second answer contains more information than its individual words. This project tests that hypothesis by extracting **what was said**, measuring **how it was said structurally**, and learning complementary representations of the transcript.
+A 45 to 60 second spoken answer carries more signal than its words alone. I tested that by pulling out **what was said** (transformer view of the transcript) and **how it was structured** (22 hand-built statistics), then blending the two on out-of-fold predictions.
 
-```text
-                 45–60s spoken response
-                           │
-                           ▼
-                    Whisper ASR
-                           │
-                    ┌──────┴──────┐
-                    ▼             ▼
-             Transcript       Transcript
-              statistics        text
-                    │             │
-                    ▼             ▼
-              Ridge model    DeBERTa-v3-base
-                    │             │
-                    └──────┬──────┘
-                           ▼
-                  OOF-weighted blend
-                           │
-                           ▼
-                 Final grammar score
-                         0–5
+```mermaid
+flowchart LR
+    A["Spoken answer<br/>45-60s"] --> B["Whisper ASR"]
+    B --> C["Transcript text"]
+    B --> D["22 transcript<br/>statistics"]
+    C --> E["DeBERTa-v3-base"]
+    D --> F["Ridge Regression"]
+    E --> G{{"OOF-weighted blend<br/>49% / 51%"}}
+    F --> G
+    G --> H(["Grammar score 0-5"])
+    style A fill:#0b1020,stroke:#67e8f9,color:#fff
+    style B fill:#1e1b4b,stroke:#a78bfa,color:#fff
+    style C fill:#1e1b4b,stroke:#a78bfa,color:#fff
+    style D fill:#1e1b4b,stroke:#a78bfa,color:#fff
+    style E fill:#4c1d95,stroke:#c4b5fd,color:#fff
+    style F fill:#075985,stroke:#7dd3fc,color:#fff
+    style G fill:#0f766e,stroke:#5eead4,color:#fff
+    style H fill:#0b1020,stroke:#67e8f9,color:#67e8f9
 ```
-
-## What was built
-
-| Signal | Model | What it captures |
-|:---|:---|:---|
-| **22 transcript features** | Ridge Regression | fluency, sentence structure, repetition, lexical diversity, pauses |
-| **Full transcript** | DeBERTa-v3-base | contextual language patterns |
-| **OOF predictions** | 49/51 ensemble | complementary errors and more stable predictions |
-
-The transcript-statistics model uses **22 leakage-safe features** covering word counts, sentence structure, repetition, lexical diversity, speech rate, pauses, and ASR confidence.
 
 ---
 
 ## Results
 
-### OOF validation
+<div align="center">
+<img src="assets/rmse.svg" alt="OOF RMSE by model" width="100%"/>
+</div>
 
-| Model | RMSE ↓ | Pearson ↑ |
-|:---|---:|---:|
-| Mean predictor | 1.238 | — |
-| TF-IDF word | 1.156 | — |
-| TF-IDF character | 1.093 | — |
-| TF-IDF word + character | 1.109 | — |
-| Transcript Statistics + Ridge | **0.869056** | **0.712327** |
-| DeBERTa-v3-base | 0.873363 | 0.718217 |
-| **DeBERTa + Statistics Ridge** | **0.776600** | **0.784835** |
+<table>
+<tr>
+<td width="50%" valign="top">
 
-### Why the ensemble worked
+### How the score improved
 
-The two models were not making the same mistakes.
+| Step | What changed | RMSE |
+|:---|:---|---:|
+| 1 | Mean predictor baseline | 1.238 |
+| 2 | TF-IDF (best: character n-grams) | 1.093 |
+| 3 | 22 transcript statistics + Ridge | **0.869** |
+| 4 | DeBERTa-v3-base on full transcript | 0.873 |
+| 5 | **Blend of 3 and 4** | **0.7766** |
 
-**Residual correlation: 0.592**
+Pearson went from 0.712 (stats) and 0.718 (DeBERTa) to **0.785** for the blend. Total RMSE drop vs the mean baseline: **37%**.
 
-That diversity translated into a substantial OOF improvement:
+</td>
+<td width="50%" valign="top">
 
-```text
-S5 DeBERTa             0.8734 RMSE
-                         │
-                         │  −0.0968
-                         ▼
-49% DeBERTa
-51% Statistics Ridge   0.7766 RMSE
-```
+### What the experiments showed
 
-The blend improved RMSE on **all 5 validation folds**:
+- **Surface n-grams plateau fast.** Adding word n-grams on top of character n-grams made it worse (1.109 vs 1.093).
+- **Structure beats vocabulary.** Fluency, sentence shape, repetition, lexical diversity, speech rate, pauses and ASR confidence in just 22 features matched a transformer.
+- **Equal scores, different mistakes.** The two models scored almost the same alone, but their residual correlation was only **0.592**.
+- **That gap is the win.** Blending cut RMSE by **0.0968** over the best single model.
 
-| Fold | DeBERTa | Blend | Improvement |
-|---:|---:|---:|---:|
+</td>
+</tr>
+</table>
+
+### The blend improved every single fold
+
+| Fold | DeBERTa alone | Blend | Gain |
+|:---:|:---:|:---:|:---:|
 | 0 | 0.7550 | **0.6382** | +0.1167 |
 | 1 | 0.9958 | **0.8922** | +0.1037 |
 | 2 | 0.8541 | **0.7639** | +0.0903 |
 | 3 | 0.9342 | **0.8460** | +0.0883 |
 | 4 | 0.8057 | **0.7158** | +0.0898 |
 
-> **5/5 folds improved.** The ensemble was selected from OOF validation rather than leaderboard probing.
+> **5 out of 5 folds improved.** The 49/51 weight was picked from training OOF predictions, never by probing the public leaderboard.
 
 ---
 
 ## Engineering choices
 
-**Leakage-safe validation**  
-Fixed 5-fold stratification on score bins. Every candidate generates OOF predictions on the same folds.
+<table>
+<tr>
+<td width="25%" valign="top">
 
-**Cached ASR**  
-Whisper transcripts and derived features are cached so expensive audio processing is not repeated unnecessarily.
+**Leakage-safe validation**
 
-**Complementary modeling**  
-The pipeline combines a compact interpretable statistical model with a contextual transformer instead of relying on one model alone.
+Fixed 5-fold split, stratified on score bins. Every candidate model produces OOF predictions on the exact same folds, so comparisons are fair.
 
-**OOF-first model selection**  
-The ensemble weight was selected from training OOF predictions, not by repeatedly probing the public leaderboard.
+</td>
+<td width="25%" valign="top">
 
-**Reproducible artifacts**  
-OOF predictions, test predictions, and intermediate results are stored under `/kaggle/working/shl/`.
+**Cached ASR**
+
+Whisper transcripts and derived features are cached, so the expensive audio step runs once and every later experiment is fast.
+
+</td>
+<td width="25%" valign="top">
+
+**Complementary models**
+
+A compact, interpretable statistical model paired with a contextual transformer, instead of betting on one big model.
+
+</td>
+<td width="25%" valign="top">
+
+**Reproducible artifacts**
+
+OOF predictions, test predictions and intermediate results are saved under `/kaggle/working/shl/`.
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -117,19 +133,16 @@ OOF predictions, test predictions, and intermediate results are stored under `/k
 
 **49% DeBERTa-v3-base + 51% Transcript Statistics Ridge**
 
-- **216 / 216** test predictions
-- **0 NaN**
-- **0 Inf**
-- Predictions clipped to the valid **0–5** range
-- Submission file: `submission.csv`
-
----
+`216 / 216` test predictions &nbsp;|&nbsp; `0 NaN` &nbsp;|&nbsp; `0 Inf` &nbsp;|&nbsp; clipped to the valid `0-5` range &nbsp;|&nbsp; output: `submission.csv`
 
 <div align="center">
 
-### The main takeaway
+### Takeaway
 
-**Grammar scoring did not need a bigger model alone.  
-The strongest improvement came from combining different views of the same speech.**
+**Grammar scoring did not need a bigger model. It needed a second, different view of the same speech.**
+
+<br/>
+
+**Vansh** &nbsp;|&nbsp; [Portfolio](https://vanshbhutani.me) &nbsp;|&nbsp; [GitHub](https://github.com/vanshbhutani1405) &nbsp;|&nbsp; [LinkedIn](https://linkedin.com/in/vansh-62b84a184) &nbsp;|&nbsp; [Kaggle](https://kaggle.com/vanshbhutani)
 
 </div>
